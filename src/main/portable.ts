@@ -1,26 +1,64 @@
-// src/main/portable.ts
+/**
+ * 便携模式初始化模块
+ * 通过副作用 import 引入：import './portable'
+ * 必须是主进程入口的第一个 import —— 保证在任何模块读取路径之前执行
+ */
 import { app } from 'electron'
 import { join, dirname } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 
-export function setupPortableMode(): void {
-  // 1. electron-builder portable target 注入的环境变量（仅 Windows portable target）
+/**
+ * 解析"程序所在目录"
+ * macOS 下 exe 在 .app 包内部，需要向上找到 .app 所在目录
+ */
+function resolveAppDir(exePath: string): string {
+  const appMarker = '.app/Contents/MacOS'
+  const idx = exePath.indexOf(appMarker)
+  if (idx !== -1) return exePath.slice(0, idx)
+  return dirname(exePath)
+}
+
+function detectPortableBase(): string | null {
+  // 1. electron-builder portable target (Windows) 注入的环境变量
   const portableEnv = process.env.PORTABLE_EXECUTABLE_DIR
-  // 2. 手动便携模式：exe 同级放一个 .portable 空文件
-  const exeDir = dirname(app.getPath('exe'))
-  const marker = join(exeDir, '.portable')
+  if (portableEnv) return portableEnv
 
-  if (!portableEnv && !existsSync(marker)) return   // 非便携环境，走默认路径
+  // 2. Linux AppImage：APPIMAGE 指向 .AppImage 文件自身
+  const appimagePath = process.env.APPIMAGE
+  if (appimagePath && appimagePath.endsWith('.AppImage')) {
+    return dirname(appimagePath)
+  }
 
-  const base = portableEnv || exeDir
-  const dataDir = join(base, 'Chat2API-Data')
-  if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true })
+  // 3. 手动便携模式：程序同级目录存在 .portable 空文件
+  try {
+    const exeDir = resolveAppDir(app.getPath('exe'))
+    if (existsSync(join(exeDir, '.portable'))) return exeDir
+  } catch {
+    // 极端早期 getPath 可能不可用，忽略
+  }
 
-  // 必须在 ready 之前、requestSingleInstanceLock 之前
+  return null
+}
+
+const portableBase = detectPortableBase()
+
+if (portableBase) {
+  const dataDir = join(portableBase, 'Chat2API-Data')
+  if (!existsSync(dataDir)) {
+    mkdirSync(dataDir, { recursive: true })
+  }
+
+  // 必须在 app.ready 和 requestSingleInstanceLock 之前调用
   app.setPath('userData', dataDir)
-  app.setPath('logs', join(dataDir, 'logs'))
+  app.setPath('logs', join(dataDir, 'app-logs'))
   app.setPath('crashDumps', join(dataDir, 'crashDumps'))
 
-  // 标记运行时便携模式，给 updater 和 IPC 用
+  // 供 store.ts / updater.ts / 渲染进程读取
   process.env.CHAT2API_PORTABLE = '1'
+  process.env.CHAT2API_PORTABLE_DATA_DIR = dataDir
+
+  console.log('[Portable] Mode enabled. Data dir:', dataDir)
 }
+
+export const PORTABLE_ENABLED = process.env.CHAT2API_PORTABLE === '1'
+export const PORTABLE_DATA_DIR = process.env.CHAT2API_PORTABLE_DATA_DIR || null
