@@ -1,3 +1,8 @@
+// --- 便携模式重定向（必须放最前面）---
+import { setupPortableMode } from './portable'
+setupPortableMode()
+// --------------------------------------
+
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { createWindow, getMainWindow, loadUrl, loadFile, openDevTools } from './window/manager'
@@ -5,6 +10,8 @@ import { createTrayManager, TrayManager } from './tray/TrayManager'
 import { registerIpcHandlers } from './ipc/handlers'
 import { UpdaterManager } from './updater'
 import { storeManager } from './store/store'
+// ... 其余代码不变
+
 
 // Prevent uncaught exceptions from crashing the app
 process.on('uncaughtException', (error) => {
