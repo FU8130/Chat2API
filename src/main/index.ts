@@ -1,7 +1,6 @@
-// --- 便携模式重定向（必须放最前面）---
-import { setupPortableMode } from './portable'
-setupPortableMode()
-// --------------------------------------
+// --- 便携模式重定向（副作用 import，必须放最前面）---
+import './portable'
+// ------------------------------------------------------
 
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
